@@ -1,41 +1,42 @@
-// Import du polyfill fetch pour Node.js
+// ---------------------------
+// 🌐 Polyfill fetch + FormData pour Node.js
+// ---------------------------
 import fetch, { Headers, Request, Response } from 'node-fetch';
-import { Blob } from "fetch-blob";
+import { Blob } from 'fetch-blob';
+import { FormData } from 'formdata-node';
 
-global.Blob = Blob;
+// Ajout des polyfills globaux pour OpenAI SDK
+globalThis.fetch = fetch;
+globalThis.Headers = Headers;
+globalThis.Request = Request;
+globalThis.Response = Response;
+globalThis.Blob = Blob;
+globalThis.FormData = FormData;
 
-
-// Polyfill global de fetch et classes associées (nécessaire pour la lib OpenAI)
-if (!globalThis.fetch) {
-  globalThis.fetch = fetch;
-}
-if (!globalThis.Headers) {
-  globalThis.Headers = Headers;
-}
-if (!globalThis.Request) {
-  globalThis.Request = Request;
-}
-if (!globalThis.Response) {
-  globalThis.Response = Response;
-}
-
+// ---------------------------
+// 📦 Imports Node.js et .env
+// ---------------------------
 import fs from 'fs';
 import path from 'path';
 import 'dotenv/config';
 import OpenAI from 'openai';
 
-// Initialisation de l’API OpenAI avec la clé d’API
+// ---------------------------
+// 🔑 Initialisation OpenAI
+// ---------------------------
 const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY,
 });
 
-// Dossier à surveiller (exemple)
+// ---------------------------
+// 📂 Dossier Winamax à surveiller
+// ---------------------------
 const watchDir = '/Users/nowonnguyen/Library/Application Support/winamax/documents/accounts/NonoBasket/history';
+const fileSizes = {}; // Mémorise les tailles de fichiers
 
-// Objet pour mémoriser la taille des fichiers lus
-const fileSizes = {};
-
-// Fonction d’appel à l’API OpenAI pour recevoir un conseil poker
+// ---------------------------
+// 🧠 Fonction d'appel IA
+// ---------------------------
 async function getPokerAdvice(handText) {
   try {
     const response = await openai.chat.completions.create({
@@ -43,7 +44,7 @@ async function getPokerAdvice(handText) {
       messages: [
         {
           role: 'system',
-          content: "Tu es un coach de poker Texas Hold'em expert. Sois clair, concis, et donne des conseils précis étape par étape.",
+          content: "Tu es un coach expert de poker Texas Hold'em. Donne des conseils étape par étape clairs et précis.",
         },
         {
           role: 'user',
@@ -54,42 +55,48 @@ async function getPokerAdvice(handText) {
     });
     return response.choices[0].message.content.trim();
   } catch (error) {
-    console.error('Erreur IA :', error);
+    console.error('❌ Erreur IA :', error);
     return null;
   }
 }
 
-// Traitement des nouvelles mains détectées dans le fichier
+// ---------------------------
+// ✨ Traitement des nouvelles mains
+// ---------------------------
 function processNewData(newData) {
-  const hands = newData.split(/\n\s*\n/);
+  const hands = newData.split(/\n\s*\n/); // Sépare les mains par double saut de ligne
   hands.forEach(async (hand) => {
-    if (hand.trim().length > 0) {
-      console.log('--- Nouvelle main détectée ---');
+    if (hand.trim()) {
+      console.log('------------------------------');
+      console.log('🃏 Nouvelle main détectée :\n');
       console.log(hand);
       console.log('------------------------------\n');
 
       const advice = await getPokerAdvice(hand);
       if (advice) {
-        console.log('Conseil IA :', advice, '\n');
+        console.log('💡 Conseil IA :', advice, '\n');
       }
     }
   });
 }
 
-// Démarrage du watcher sur le dossier history
-console.log(`🚀 Démarrage du watcher sur : ${watchDir}`);
+// ---------------------------
+// 👀 Surveillance du dossier
+// ---------------------------
+console.log(`🚀 Watcher en cours sur : ${watchDir}\n`);
 
 fs.watch(watchDir, (eventType, filename) => {
   if (!filename) return;
   const filePath = path.join(watchDir, filename);
 
   fs.stat(filePath, (err, stats) => {
-    if (err) return;
+    if (err || !stats.isFile()) return;
 
-    const previousSize = fileSizes[filename] || 0;
+    const prevSize = fileSizes[filename] || 0;
 
-    if (stats.size > previousSize) {
-      const stream = fs.createReadStream(filePath, { start: previousSize, end: stats.size - 1 });
+    if (stats.size > prevSize) {
+      // Lecture incrémentale
+      const stream = fs.createReadStream(filePath, { start: prevSize, end: stats.size - 1 });
       let newData = '';
 
       stream.on('data', (chunk) => {
@@ -98,10 +105,10 @@ fs.watch(watchDir, (eventType, filename) => {
 
       stream.on('end', () => {
         processNewData(newData);
-        fileSizes[filename] = stats.size;
+        fileSizes[filename] = stats.size; // Màj taille
       });
-    } else if (stats.size < previousSize) {
-      // Fichier tronqué ou réinitialisé, on reset la taille mémorisée
+    } else if (stats.size < prevSize) {
+      // Fichier réinitialisé
       fileSizes[filename] = stats.size;
     }
   });
